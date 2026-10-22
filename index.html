@@ -3,6 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <!-- 禁用浏览器缓存 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>规则石板 - 益智闯关</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Microsoft Yahei', sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -35,7 +39,6 @@
             width: 100%;
         }
 
-        /* 地图区域 */
         .map-wrapper {
             background: #fff;
             padding: 10px;
@@ -67,7 +70,6 @@
         .tile.door.open { background: #86efac; }
         .tile.goal { background: #bfdbfe; border: 2px dashed #3b82f6; }
 
-        /* 石板覆盖层 */
         .plate-overlay {
             position: absolute;
             pointer-events: none;
@@ -78,7 +80,6 @@
             mix-blend-mode: multiply;
         }
 
-        /* 实体 */
         .entity {
             position: absolute;
             border-radius: 50%;
@@ -92,8 +93,9 @@
         .player { background: #3b82f6; color: white; }
         .box { background: #d97706; color: white; }
         .box.locked { background: #6b7280; }
+        .star { background: transparent; font-size: 28px; z-index: 1; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.15); } 100% { transform: scale(1); } }
 
-        /* 石板手牌区 */
         .plate-panel {
             background: #fff;
             padding: 10px;
@@ -125,7 +127,6 @@
             vertical-align: middle;
         }
 
-        /* 控制按钮 */
         .controls {
             margin-top: 12px;
             display: flex;
@@ -179,8 +180,12 @@
             max-width: 500px;
             line-height: 1.6;
         }
+        .version-info {
+            margin-top: 8px;
+            font-size: 10px;
+            color: #cbd5e1;
+        }
 
-        /* 虚拟方向键 */
         .dpad-wrapper {
             display: none;
             justify-content: center;
@@ -217,7 +222,6 @@
         .dpad-btn.right { grid-column: 3; grid-row: 2; }
         .dpad-btn.down { grid-column: 2; grid-row: 3; }
 
-        /* 胜利弹窗 */
         .modal {
             position: fixed;
             top: 0; left: 0;
@@ -241,7 +245,6 @@
         .modal-content h2 { margin-bottom: 10px; color: #10b981; font-size: 20px; }
         .modal-content p { margin-bottom: 18px; color: #6b7280; font-size: 14px; }
 
-        /* ===== 手机端适配 ===== */
         @media (max-width: 720px) {
             body { padding: 8px; padding-bottom: 16px; }
             .game-header h1 { font-size: 18px; }
@@ -255,7 +258,6 @@
             .tile { font-size: 16px; }
         }
 
-        /* 触屏设备显示方向键 */
         @media (pointer: coarse) {
             .dpad-wrapper.show { display: flex; }
         }
@@ -264,7 +266,7 @@
 <body>
     <div class="game-header">
         <h1>规则石板</h1>
-        <div class="level-info" id="level-name">第1关：虚空铺路</div>
+        <div class="level-info" id="level-name"></div>
         <div class="hint" id="level-hint"></div>
     </div>
 
@@ -301,6 +303,7 @@
         布置阶段可摆放/收回石板，规则叠加生效<br>
         行动阶段用方向键或 WASD 移动角色
     </div>
+    <div class="version-info" id="version-text"></div>
 
     <div class="modal" id="win-modal">
         <div class="modal-content">
@@ -311,6 +314,10 @@
     </div>
 
     <script>
+        // 版本号更新（配合网址参数 ?v=1.3.2 强制刷新手机端缓存）
+        const GAME_VERSION = "v1.3.2";
+        document.getElementById('version-text').textContent = "版本号: " + GAME_VERSION;
+
         // ========== 常量 ==========
         const TILE = {
             FLOOR: 0,
@@ -318,7 +325,8 @@
             VOID: 2,
             SWITCH: 3,
             DOOR: 4,
-            GOAL: 5
+            GOAL: 5,
+            STAR: 6
         };
 
         const PLATE_TYPES = {
@@ -379,7 +387,7 @@
                 player: {x: 1, y: 2},
                 boxes: [],
                 plates: [ { type: 'void_fill', width: 2, height: 2 } ],
-                hint: '前方是致命虚空。将虚空固化石板覆盖在虚空区域，把它变成可通行的地面'
+                hint: '将虚空固化石板覆盖在虚空区域，把它变成可通行的地面'
             },
             {
                 name: '第2关：初识同移',
@@ -399,26 +407,29 @@
             },
             {
                 name: '第3关：锁箱控场',
-                width: 9, height: 4,
+                width: 9, height: 6,
                 map: [
                     [1,1,1,1,1,1,1,1,1],
                     [1,0,0,0,0,0,4,5,1],
-                    [1,0,3,0,0,3,1,1,1],
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,0,0,1],
+                    [1,3,0,0,3,0,0,0,1],
                     [1,1,1,1,1,1,1,1,1]
                 ],
                 player: {x: 1, y: 1},
                 boxes: [
-                    {x: 2, y: 2},
-                    {x: 4, y: 2}
+                    {x: 2, y: 4},
+                    {x: 3, y: 4}
                 ],
-                plates: [
-                    { type: 'sync_move', width: 5, height: 2 },
+                plates: [ 
+                    { type: 'sync_move', width: 5, height: 5 },
                     { type: 'lock_box', width: 1, height: 1 }
                 ],
-                hint: '同移让箱子保持间距。用锁箱冻结左箱，只让右箱移动踩机关'
+                hint: '你在上层，无法直接推箱子。用同移石板覆盖两层，把右箱移到开关后锁住，再走回左边让左箱踩开关'
             },
             {
                 name: '第4关：轻步瞒机关',
+                switchesBreakable: true,
                 width: 9, height: 5,
                 map: [
                     [1,1,1,1,1,1,1,1,1],
@@ -430,7 +441,7 @@
                 player: {x: 1, y: 1},
                 boxes: [{x: 2, y: 3}],
                 plates: [ { type: 'light_step', width: 1, height: 1 } ],
-                hint: '上层机关一踩就坏。把轻步石板放在上层机关上安全穿过；下层推箱子上机关开门'
+                hint: '上层机关一踩就坏。必须用轻步石板盖住上层机关，然后到下层推箱子踩机关'
             },
             {
                 name: '第5关：反重力初探',
@@ -486,40 +497,43 @@
                 player: {x: 1, y: 1},
                 boxes: [],
                 plates: [ { type: 'delay', width: 1, height: 1 } ],
-                hint: '用延迟石板覆盖机关，离开机关后门会延迟2回合才关闭'
+                hint: '踩上机关开门，离开后门会延迟2步才关，利用间隙穿过门'
             },
+            // 第9关：强制经过终点
             {
                 name: '第9关：终点陷阱',
-                width: 9, height: 4,
+                width: 9, height: 3,
+                hasStar: true,
+                starPos: {x: 7, y: 1},
                 map: [
                     [1,1,1,1,1,1,1,1,1],
-                    [1,0,0,0,4,5,2,1,1],
-                    [1,0,0,0,0,1,0,1,1],
+                    [1,0,0,0,0,5,0,6,1],
                     [1,1,1,1,1,1,1,1,1]
                 ],
                 player: {x: 1, y: 1},
-                boxes: [{x: 4, y: 1}],
+                boxes: [],
                 plates: [ { type: 'goal_disable', width: 1, height: 1 } ],
-                hint: '把箱子往右推到虚空里清路，然后踏上终点'
+                hint: '不盖终点拿星会失败。必须用石板盖住终点走过去拿星，拿完切回布置阶段收回石板，再踩终点通关'
             },
+            // 第10关：严密路线拓扑
             {
                 name: '第10关：法则融合',
-                width: 11, height: 5,
+                width: 13, height: 5,
                 map: [
-                    [1,1,1,1,1,1,1,1,1,1,1],
-                    [1,0,0,2,2,0,0,3,0,5,1],
-                    [1,0,0,2,2,0,0,0,0,0,1],
-                    [1,0,0,0,0,0,0,0,4,0,1],
-                    [1,1,1,1,1,1,1,1,1,1,1]
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,2,2,0,0,0,1,0,0,2,0,5],
+                    [1,0,2,2,0,0,0,1,0,0,2,0,1],
+                    [1,0,0,0,0,0,3,4,0,2,2,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1,1,1]
                 ],
                 player: {x: 1, y: 1},
-                boxes: [{x: 6, y: 2}],
+                boxes: [{x: 5, y: 3}, {x: 11, y: 1}],
                 plates: [
                     { type: 'void_fill', width: 2, height: 2 },
                     { type: 'lock_box', width: 1, height: 1 },
                     { type: 'swap', width: 2, height: 2 }
                 ],
-                hint: '先用虚空固化穿过左侧虚空，再把箱子推到机关上开门'
+                hint: '虚空固化铺路推箱子。用锁箱穿过踩机关的箱子，在右侧利用交换石板与箱子换位'
             }
         ];
 
@@ -534,14 +548,13 @@
         let turnCount = 0;
         let doorCloseAt = Infinity;
         let brokenSwitches = new Set();
+        let hasCollectedStar = false;
 
         let TILE_SIZE = 48;
         const GAP = 2;
 
-        // ========== 动态格子尺寸计算 ==========
         function updateTileSize() {
             const level = levels[currentLevel];
-            // 可用宽度 = 视口宽度 - body 左右 padding - map-wrapper padding - 少量余量
             const padding = window.innerWidth <= 720 ? 16 : 40;
             const wrapperPadding = 20;
             const available = Math.min(window.innerWidth - padding - wrapperPadding, 760);
@@ -549,7 +562,6 @@
             TILE_SIZE = Math.max(24, Math.min(48, size));
         }
 
-        // ========== 初始化 ==========
         function initGame() {
             updateTileSize();
             loadLevel(currentLevel);
@@ -575,6 +587,7 @@
             turnCount = 0;
             doorCloseAt = Infinity;
             brokenSwitches.clear();
+            hasCollectedStar = false;
 
             updateTileSize();
 
@@ -586,7 +599,6 @@
             updateStatus('点击石板选中，再点击地图放置；点击已放置石板可收回');
         }
 
-        // ========== 渲染 ==========
         function renderMap() {
             const level = levels[currentLevel];
             const mapEl = document.getElementById('game-map');
@@ -616,6 +628,10 @@
                             tile.textContent = doorOpen ? '开' : '门';
                             break;
                         case TILE.GOAL: tile.classList.add('goal'); tile.textContent = '★'; break;
+                        case TILE.STAR: 
+                            tile.classList.add('floor'); 
+                            if (!hasCollectedStar) tile.textContent = '⭐'; 
+                            break;
                     }
 
                     tile.addEventListener('click', () => handleTileClick(x, y));
@@ -719,7 +735,6 @@
             });
         }
 
-        // ========== 石板放置 ==========
         function handleTileClick(x, y) {
             if (gamePhase !== 'place') return;
             if (selectedPlateIndex === null) return;
@@ -779,12 +794,13 @@
             updateStatus('石板已收回手牌');
         }
 
-        // ========== 阶段切换 ==========
         function togglePhase() {
             if (gamePhase === 'place') {
                 gamePhase = 'play';
                 updatePhaseUI();
                 renderPlates();
+                updateSwitches();
+                checkWin();
                 updateStatus('行动阶段：点击方向键或按 WASD/方向键移动');
             } else {
                 gamePhase = 'place';
@@ -814,11 +830,9 @@
             }
         }
 
-        // ========== 移动控制 ==========
         function attemptMove(dx, dy) {
             if (gamePhase !== 'play') return;
 
-            // 反重力：区域内上下方向反转
             if (hasPlateEffect(playerPos.x, playerPos.y, 'reverse_gravity')) {
                 dy = -dy;
             }
@@ -841,7 +855,6 @@
             attemptMove(dx, dy);
         }
 
-        // 虚拟方向键
         function setupDpad() {
             document.querySelectorAll('.dpad-btn').forEach(btn => {
                 const handler = (e) => {
@@ -877,7 +890,7 @@
 
             if (targetTile === TILE.DOOR && !doorOpen) return;
 
-            // ===== 交换石板：踏入区域时触发 =====
+            // 交换石板：踏入区域时触发
             if (hasPlateEffect(newX, newY, 'swap')) {
                 let nearestBoxIdx = null;
                 let minDist = Infinity;
@@ -910,12 +923,12 @@
                 }
             }
 
-            // ===== 箱子碰撞 =====
+            // 箱子碰撞检查
             const boxIdx = boxes.findIndex(b => b.x === newX && b.y === newY);
             if (boxIdx !== -1) {
                 const box = boxes[boxIdx];
                 if (hasPlateEffect(box.x, box.y, 'lock_box')) {
-                    // 箱子被锁定：玩家可以穿过它
+                    // 锁住的箱子可作为透明通道
                 } else {
                     const boxNewX = box.x + dx;
                     const boxNewY = box.y + dy;
@@ -929,20 +942,23 @@
                 }
             }
 
-            // ===== 虚空检查 =====
             if (targetTile === TILE.VOID && !isSafeVoid(newX, newY)) {
                 gameOver('掉入虚空，挑战失败');
                 return;
             }
 
-            // ===== 移动玩家 =====
             playerPos.x = newX;
             playerPos.y = newY;
             turnCount++;
 
+            // 检查是否拾取五角星
+            if (targetTile === TILE.STAR && !hasCollectedStar) {
+                hasCollectedStar = true;
+                updateStatus('⭐ 已拾取五角星！现在可以去终点了');
+            }
+
             updateSwitches();
 
-            // ===== 同移石板 =====
             if (hasPlateEffect(newX, newY, 'sync_move')) {
                 triggerSyncMove(dx, dy);
                 updateSwitches();
@@ -957,7 +973,7 @@
             if (x < 0 || x >= level.width || y < 0 || y >= level.height) return false;
 
             const tile = level.map[y][x];
-            if (tile === TILE.WALL || tile === TILE.DOOR) return false;
+            if (tile === TILE.WALL) return false;
             if (boxes.some(b => b.x === x && b.y === y)) return false;
 
             return true;
@@ -982,61 +998,63 @@
             });
         }
 
-        // ========== 开关 / 门 ==========
+        // ========== 开关与门逻辑 ==========
         function updateSwitches() {
             const level = levels[currentLevel];
-            let anyBoxOnSwitch = false;
+            let allSwitches = [];
 
             for (let y = 0; y < level.height; y++) {
                 for (let x = 0; x < level.width; x++) {
-                    if (level.map[y][x] !== TILE.SWITCH) continue;
-
-                    const key = `${x},${y}`;
-                    const boxOn = boxes.some(b => b.x === x && b.y === y);
-                    const playerOn = playerPos.x === x && playerPos.y === y
-                        && !hasPlateEffect(x, y, 'light_step');
-
-                    if (playerOn && !boxOn) {
-                        brokenSwitches.add(key);
-                    }
-
-                    if (boxOn) anyBoxOnSwitch = true;
-                }
-            }
-
-            let anyBroken = false;
-            for (let y = 0; y < level.height; y++) {
-                for (let x = 0; x < level.width; x++) {
-                    if (level.map[y][x] === TILE.SWITCH && brokenSwitches.has(`${x},${y}`)) {
-                        anyBroken = true;
+                    if (level.map[y][x] === TILE.SWITCH) {
+                        allSwitches.push({x, y});
                     }
                 }
             }
 
-            const shouldOpen = anyBoxOnSwitch && !anyBroken;
+            if (allSwitches.length === 0) {
+                doorOpen = false;
+                return;
+            }
+
+            allSwitches.forEach(sw => {
+                const key = `${sw.x},${sw.y}`;
+                const boxOn = boxes.some(b => b.x === sw.x && b.y === sw.y);
+                const playerOn = playerPos.x === sw.x && playerPos.y === sw.y;
+                const hasLightStep = hasPlateEffect(sw.x, sw.y, 'light_step');
+                
+                if (level.switchesBreakable && playerOn && !boxOn && !hasLightStep) {
+                    brokenSwitches.add(key);
+                }
+            });
+
+            let activeCount = 0;
+            allSwitches.forEach(sw => {
+                const key = `${sw.x},${sw.y}`;
+                if (brokenSwitches.has(key)) return; 
+
+                const boxOn = boxes.some(b => b.x === sw.x && b.y === sw.y);
+                const playerOn = playerPos.x === sw.x && playerPos.y === sw.y && !hasPlateEffect(sw.x, sw.y, 'light_step');
+                
+                if (boxOn || playerOn) {
+                    activeCount++;
+                }
+            });
+
+            const shouldOpen = (activeCount === allSwitches.length);
 
             if (shouldOpen) {
                 doorOpen = true;
                 doorCloseAt = Infinity;
-            } else if (doorOpen && doorCloseAt === Infinity) {
-                let hasDelaySwitch = false;
-                for (let y = 0; y < level.height; y++) {
-                    for (let x = 0; x < level.width; x++) {
-                        if (level.map[y][x] === TILE.SWITCH && hasPlateEffect(x, y, 'delay')) {
-                            hasDelaySwitch = true;
-                        }
+            } else {
+                if (doorOpen) {
+                    let hasDelay = allSwitches.some(sw => hasPlateEffect(sw.x, sw.y, 'delay'));
+                    if (hasDelay && doorCloseAt === Infinity) {
+                        doorCloseAt = turnCount + 2;
+                    } else if (!hasDelay || turnCount >= doorCloseAt) {
+                        doorOpen = false;
+                        doorCloseAt = Infinity;
                     }
                 }
-                if (hasDelaySwitch) {
-                    doorCloseAt = turnCount + 2;
-                } else {
-                    doorOpen = false;
-                }
-            }
-
-            if (doorOpen && turnCount >= doorCloseAt) {
-                doorOpen = false;
-                doorCloseAt = Infinity;
             }
         }
 
@@ -1048,6 +1066,12 @@
                     updateStatus('终点被否定石板覆盖，无法通关');
                     return;
                 }
+                
+                if (level.hasStar && !hasCollectedStar) {
+                    gameOver('你没拿五角星就踩了终点，法则崩溃！');
+                    return;
+                }
+
                 showWinModal();
             }
         }
@@ -1064,7 +1088,6 @@
             document.getElementById('win-modal').classList.add('show');
         }
 
-        // ========== 按钮 ==========
         function resetLevel() {
             document.getElementById('win-modal').classList.remove('show');
             loadLevel(currentLevel);
@@ -1090,7 +1113,6 @@
             document.getElementById('status').textContent = text;
         }
 
-        // ========== 启动 ==========
         initGame();
     </script>
 </body>
