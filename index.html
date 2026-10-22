@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>规则石板 - 益智闯关</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Microsoft Yahei', sans-serif; }
+        body {
+            background: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            color: #333;
+        }
+        .game-header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        .game-header h1 { font-size: 24px; margin-bottom: 5px; color: #1f2937; }
+        .level-info { font-size: 14px; color: #6b7280; margin-bottom: 8px; }
+        .hint { font-size: 13px; color: #f59e0b; background: #fffbeb; padding: 6px 12px; border-radius: 6px; max-width: 600px; }
+
+        .game-container {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            margin-top: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .map-wrapper {
+            background: #fff;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        #game-map {
+            display: grid;
+            gap: 2px;
+            background: #e5e7eb;
+            padding: 2px;
+            border-radius: 6px;
+            position: relative;
+        }
+        .tile {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            position: relative;
+            transition: background 0.2s;
+        }
+        .tile.floor { background: #f9fafb; }
+        .tile.wall { background: #374151; }
+        .tile.void { background: #111827; background-image: repeating-linear-gradient(45deg, #000 0, #000 2px, transparent 2px, transparent 8px); }
+        .tile.switch { background: #fef3c7; }
+        .tile.door { background: #fca5a5; }
+        .tile.door.open { background: #86efac; }
+        .tile.goal { background: #bfdbfe; border: 2px dashed #3b82f6; }
+
+        .plate-overlay {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0.4;
+            border: 2px dashed rgba(0,0,0,0.3);
+            border-radius: 4px;
+            z-index: 1;
+            mix-blend-mode: multiply;
+        }
+
+        .entity {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            z-index: 2;
+            transition: all 0.15s ease;
+        }
+        .player { background: #3b82f6; color: white; }
+        .box { background: #d97706; color: white; font-size: 16px; }
+        .box.locked { background: #6b7280; }
+
+        .plate-panel {
+            background: #fff;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            min-width: 180px;
+        }
+        .plate-panel h3 { font-size: 16px; margin-bottom: 10px; color: #374151; }
+        .plate-item {
+            padding: 8px 10px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .plate-item:hover { transform: translateX(2px); }
+        .plate-item.selected { border-color: #1f2937; transform: translateX(4px); }
+        .plate-item.used { opacity: 0.4; pointer-events: none; }
+        .plate-color {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #3b82f6; color: white; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #e5e7eb; color: #374151; }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .phase-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .phase-place { background: #dbeafe; color: #1e40af; }
+        .phase-play { background: #dcfce7; color: #166534; }
+
+        .status-bar {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #6b7280;
+            text-align: center;
+            min-height: 20px;
+        }
+
+        .guide {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #9ca3af;
+            text-align: center;
+            max-width: 500px;
+            line-height: 1.6;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .modal.show { display: flex; }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            max-width: 300px;
+        }
+        .modal-content h2 { margin-bottom: 10px; color: #10b981; }
+        .modal-content p { margin-bottom: 20px; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="game-header">
+        <h1>规则石板</h1>
+        <div class="level-info" id="level-name">第1关：虚空铺路</div>
+        <div class="hint" id="level-hint"></div>
+    </div>
+
+    <div class="game-container">
+        <div class="map-wrapper">
+            <div class="phase-tag phase-place" id="phase-tag">📐 布置阶段</div>
+            <div id="game-map"></div>
+            <div class="status-bar" id="status"></div>
+        </div>
+
+        <div class="plate-panel">
+            <h3>石板手牌</h3>
+            <div id="plate-list"></div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn btn-secondary" onclick="prevLevel()">上一关</button>
+        <button class="btn btn-secondary" onclick="resetLevel()">重置关卡</button>
+        <button class="btn btn-primary" id="phase-btn" onclick="togglePhase()">开始执行</button>
+        <button class="btn btn-secondary" onclick="nextLevel()">下一关</button>
+    </div>
+
+    <div class="guide">
+        布置阶段可摆放/收回石板，规则叠加生效<br>
+        行动阶段使用 方向键 或 WASD 控制角色移动，可随时切回布置阶段调整石板
+    </div>
+
+    <div class="modal" id="win-modal">
+        <div class="modal-content">
+            <h2>🎉 通关成功！</h2>
+            <p id="win-text">恭喜完成本关</p>
+            <button class="btn btn-success" onclick="nextLevel()">进入下一关</button>
+        </div>
+    </div>
+
+    <script>
+        // ========== 常量 ==========
+        const TILE = {
+            FLOOR: 0,
+            WALL: 1,
+            VOID: 2,
+            SWITCH: 3,
+            DOOR: 4,
+            GOAL: 5
+        };
+
+        const PLATE_TYPES = {
+            sync_move: {
+                name: '同移石板',
+                color: 'rgba(59, 130, 246, 0.5)',
+                desc: '区域内玩家移动时，所有箱子同步同向移动'
+            },
+            lock_box: {
+                name: '锁箱石板',
+                color: 'rgba(16, 185, 129, 0.5)',
+                desc: '区域内箱子无法被推动，玩家可穿过被锁箱子'
+            },
+            void_fill: {
+                name: '虚空固化石板',
+                color: 'rgba(139, 92, 246, 0.5)',
+                desc: '覆盖的虚空变为可通行地面'
+            },
+            light_step: {
+                name: '轻步石板',
+                color: 'rgba(245, 158, 11, 0.5)',
+                desc: '玩家在区域内移动不会触发压力机关'
+            },
+            reverse_gravity: {
+                name: '反重力石板',
+                color: 'rgba(239, 68, 68, 0.5)',
+                desc: '区域内虚空可站立，上下移动方向反转'
+            },
+            swap: {
+                name: '交换石板',
+                color: 'rgba(236, 72, 153, 0.5)',
+                desc: '玩家进入区域时，与区域内最近的箱子互换位置'
+            },
+            delay: {
+                name: '延迟石板',
+                color: 'rgba(107, 114, 128, 0.5)',
+                desc: '区域内机关关闭效果延迟2回合生效'
+            },
+            goal_disable: {
+                name: '终点否定石板',
+                color: 'rgba(0, 0, 0, 0.5)',
+                desc: '覆盖终点时，终点失效无法通关'
+            }
+        };
+
+        // ========== 关卡数据 ==========
+        const levels = [
+            // 第1关：虚空铺路
+            {
+                name: '第1关：虚空铺路',
+                width: 8, height: 5,
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,0,2,2,0,0,1],
+                    [1,0,0,2,2,0,5,1],
+                    [1,0,0,2,2,0,0,1],
+                    [1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 2},
+                boxes: [],
+                plates: [ { type: 'void_fill', width: 2, height: 2 } ],
+                hint: '前方是致命虚空，走过去会直接坠落。将虚空固化石板覆盖在虚空区域，把它变成可通行的地面'
+            },
+            // 第2关：初识同移
+            {
+                name: '第2关：初识同移',
+                width: 8, height: 6,
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,4,0,1],
+                    [1,0,0,0,3,1,0,1],
+                    [1,1,1,1,1,1,0,1],
+                    [1,0,0,0,0,0,5,1],
+                    [1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 1},
+                boxes: [{x: 3, y: 1}],
+                plates: [ { type: 'sync_move', width: 3, height: 2 } ],
+                hint: '箱子正下方有机关，但你没法绕到箱子上方推它。用同移石板覆盖你和箱子，你向下走时箱子会同步下移踩机关'
+            },
+            // 第3关：锁箱控场
+            {
+                name: '第3关：锁箱控场',
+                width: 9, height: 4,
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,0,0,4,5,1],
+                    [1,0,3,0,0,3,1,1,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 1},
+                boxes: [
+                    {x: 2, y: 2},
+                    {x: 4, y: 2}
+                ],
+                plates: [
+                    { type: 'sync_move', width: 5, height: 2 },
+                    { type: 'lock_box', width: 1, height: 1 }
+                ],
+                hint: '两个机关必须同时踩门才会开。同移会让箱子保持间距同步移动，永远只能踩一个。用锁箱冻结左箱，只让右箱移动'
+            },
+            // 第4关：轻步瞒机关 —— 新设计
+            {
+                name: '第4关：轻步瞒机关',
+                width: 9, height: 5,
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,3,0,4,0,5,1],
+                    [1,0,1,1,1,1,1,1,1],
+                    [1,0,0,3,0,0,0,0,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 1},
+                boxes: [{x: 2, y: 3}],
+                plates: [ { type: 'light_step', width: 1, height: 1 } ],
+                hint: '上层机关一踩就坏，门会永久关闭。把轻步石板放在上层机关上，就能安全穿过；下层推箱子上机关开门'
+            },
+            // 第5关：反重力初探 —— 新设计（无箱子挡路）
+            {
+                name: '第5关：反重力初探',
+                width: 9, height: 3,
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,2,2,2,0,5,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 1},
+                boxes: [],
+                plates: [ { type: 'reverse_gravity', width: 3, height: 1 } ],
+                hint: '中间是虚空深渊。用反重力石板覆盖虚空，区域内失重可以安全通行（注意上下方向会反转）'
+            },
+            // 第6关：双向约束 —— 新设计（锁箱成为必须）
+            {
+                name: '第6关：双向约束',
+                width: 10, height: 4,
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1],
+                    [1,1,1,1,1,1,1,1,1,1],
+                    [1,0,2,2,0,3,0,4,5,1],
+                    [1,1,1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 2},
+                boxes: [{x: 4, y: 2}],
+                plates: [
+                    { type: 'void_fill', width: 2, height: 1 },
+                    { type: 'lock_box', width: 1, height: 1 }
+                ],
+                hint: '把虚空固化铺在虚空中。箱子推到机关上后，再用锁箱石板锁定箱子，你就可以穿过被锁住的箱子到达门'
+            },
+            // 第7关：交换换位 —— 新设计（玩家有地面可以踩）
+            {
+                name: '第7关：交换换位',
+                width: 8, height: 3,
+                map: [
+                    [1,1,1,1,1,1,1,1],
+                    [1,0,0,2,2,0,5,1],
+                    [1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 1},
+                boxes: [{x: 5, y: 1}],
+                plates: [ { type: 'swap', width: 4, height: 1 } ],
+                hint: '中间是虚空，直接走过去会坠落。用交换石板覆盖你和箱子，你踏入区域时会与箱子互换位置'
+            },
+            // 第8关：延迟时序 —— 新设计（延迟关闭）
+            {
+                name: '第8关：延迟时序',
+                width: 9, height: 3,
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,3,0,4,0,5,1,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 1},
+                boxes: [],
+                plates: [ { type: 'delay', width: 1, height: 1 } ],
+                hint: '机关一松开门就关。用延迟石板覆盖机关，离开机关后门会延迟2回合才关闭'
+            },
+            // 第9关：终点陷阱 —— 新设计（箱子阻挡 + 虚空清除）
+            {
+                name: '第9关：终点陷阱',
+                width: 9, height: 4,
+                map: [
+                    [1,1,1,1,1,1,1,1,1],
+                    [1,0,0,0,4,5,2,1,1],
+                    [1,0,0,0,0,1,0,1,1],
+                    [1,1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 1},
+                boxes: [{x: 4, y: 1}],
+                plates: [ { type: 'goal_disable', width: 1, height: 1 } ],
+                hint: '箱子挡在终点前。把箱子往右推到虚空里清路，然后踏上终点。终点否定石板可以临时禁用终点'
+            },
+            // 第10关：法则融合 —— 新设计
+            {
+                name: '第10关：法则融合',
+                width: 11, height: 5,
+                map: [
+                    [1,1,1,1,1,1,1,1,1,1,1],
+                    [1,0,0,2,2,0,0,3,0,5,1],
+                    [1,0,0,2,2,0,0,0,0,0,1],
+                    [1,0,0,0,0,0,0,0,4,0,1],
+                    [1,1,1,1,1,1,1,1,1,1,1]
+                ],
+                player: {x: 1, y: 1},
+                boxes: [{x: 6, y: 2}],
+                plates: [
+                    { type: 'void_fill', width: 2, height: 2 },
+                    { type: 'lock_box', width: 1, height: 1 },
+                    { type: 'swap', width: 2, height: 2 }
+                ],
+                hint: '先用虚空固化穿过左侧虚空，再把箱子推到机关上开门。注意利用锁箱和交换石板找到正确路线'
+            }
+        ];
+
+        // ========== 游戏状态 ==========
+        let currentLevel = 0;
+        let gamePhase = 'place';
+        let placedPlates = [];
+        let selectedPlateIndex = null;
+        let playerPos = {x: 0, y: 0};
+        let boxes = [];
+        let doorOpen = false;
+        let turnCount = 0;
+        let doorCloseAt = Infinity;
+        let brokenSwitches = new Set();
+
+        const TILE_SIZE = 48;
+        const GAP = 2;
+
+        // ========== 初始化 ==========
+        function initGame() {
+            loadLevel(currentLevel);
+            document.addEventListener('keydown', handleKeyPress);
+        }
+
+        function loadLevel(levelIndex) {
+            if (levelIndex < 0 || levelIndex >= levels.length) return;
+            currentLevel = levelIndex;
+            const level = levels[levelIndex];
+
+            gamePhase = 'place';
+            placedPlates = [];
+            selectedPlateIndex = null;
+            playerPos = {...level.player};
+            boxes = level.boxes.map(b => ({...b}));
+            doorOpen = false;
+            turnCount = 0;
+            doorCloseAt = Infinity;
+            brokenSwitches.clear();
+
+            document.getElementById('level-name').textContent = level.name;
+            document.getElementById('level-hint').textContent = level.hint;
+            updatePhaseUI();
+            renderMap();
+            renderPlateList();
+            updateStatus('点击左侧石板选中，再点击地图放置；再次点击已放置石板可收回');
+        }
+
+        // ========== 渲染 ==========
+        function renderMap() {
+            const level = levels[currentLevel];
+            const mapEl = document.getElementById('game-map');
+            mapEl.innerHTML = '';
+            mapEl.style.gridTemplateColumns = `repeat(${level.width}, ${TILE_SIZE}px)`;
+            mapEl.style.width = `${level.width * TILE_SIZE + (level.width + 1) * GAP}px`;
+
+            for (let y = 0; y < level.height; y++) {
+                for (let x = 0; x < level.width; x++) {
+                    const tile = document.createElement('div');
+                    tile.className = 'tile';
+                    tile.dataset.x = x;
+                    tile.dataset.y = y;
+
+                    const tileType = level.map[y][x];
+                    switch(tileType) {
+                        case TILE.FLOOR: tile.classList.add('floor'); break;
+                        case TILE.WALL: tile.classList.add('wall'); break;
+                        case TILE.VOID: tile.classList.add('void'); break;
+                        case TILE.SWITCH: tile.classList.add('switch'); tile.textContent = '⚙'; break;
+                        case TILE.DOOR:
+                            tile.classList.add('door');
+                            if (doorOpen) tile.classList.add('open');
+                            tile.textContent = doorOpen ? '开' : '门';
+                            break;
+                        case TILE.GOAL: tile.classList.add('goal'); tile.textContent = '★'; break;
+                    }
+
+                    tile.addEventListener('click', () => handleTileClick(x, y));
+                    mapEl.appendChild(tile);
+                }
+            }
+
+            renderPlates();
+            renderEntities();
+        }
+
+        function renderPlates() {
+            const mapEl = document.getElementById('game-map');
+            document.querySelectorAll('.plate-overlay').forEach(el => el.remove());
+
+            placedPlates.forEach((plate, idx) => {
+                const overlay = document.createElement('div');
+                overlay.className = 'plate-overlay';
+                overlay.style.left = `${plate.x * (TILE_SIZE + GAP) + GAP}px`;
+                overlay.style.top = `${plate.y * (TILE_SIZE + GAP) + GAP}px`;
+                overlay.style.width = `${plate.width * TILE_SIZE + (plate.width - 1) * GAP}px`;
+                overlay.style.height = `${plate.height * TILE_SIZE + (plate.height - 1) * GAP}px`;
+                overlay.style.background = PLATE_TYPES[plate.type].color;
+                overlay.dataset.plateIdx = idx;
+                overlay.style.pointerEvents = gamePhase === 'place' ? 'auto' : 'none';
+                overlay.style.cursor = gamePhase === 'place' ? 'pointer' : 'default';
+
+                if (gamePhase === 'place') {
+                    overlay.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        removePlate(idx);
+                    });
+                }
+
+                mapEl.appendChild(overlay);
+            });
+        }
+
+        function renderEntities() {
+            const mapEl = document.getElementById('game-map');
+            document.querySelectorAll('.entity').forEach(el => el.remove());
+
+            boxes.forEach((box) => {
+                const boxEl = document.createElement('div');
+                boxEl.className = 'entity box';
+                if (hasPlateEffect(box.x, box.y, 'lock_box')) boxEl.classList.add('locked');
+                boxEl.textContent = hasPlateEffect(box.x, box.y, 'lock_box') ? '🔒' : '📦';
+                boxEl.style.left = `${box.x * (TILE_SIZE + GAP) + GAP + 4}px`;
+                boxEl.style.top = `${box.y * (TILE_SIZE + GAP) + GAP + 4}px`;
+                mapEl.appendChild(boxEl);
+            });
+
+            const playerEl = document.createElement('div');
+            playerEl.className = 'entity player';
+            playerEl.id = 'player';
+            playerEl.textContent = '🧑';
+            playerEl.style.left = `${playerPos.x * (TILE_SIZE + GAP) + GAP + 4}px`;
+            playerEl.style.top = `${playerPos.y * (TILE_SIZE + GAP) + GAP + 4}px`;
+            mapEl.appendChild(playerEl);
+        }
+
+        function renderPlateList() {
+            const level = levels[currentLevel];
+            const listEl = document.getElementById('plate-list');
+            listEl.innerHTML = '';
+
+            level.plates.forEach((plate, idx) => {
+                const isUsed = placedPlates.some(p => p.plateIndex === idx);
+                const item = document.createElement('div');
+                item.className = 'plate-item';
+                if (isUsed) item.classList.add('used');
+                if (selectedPlateIndex === idx) item.classList.add('selected');
+
+                item.innerHTML = `
+                    <span class="plate-color" style="background: ${PLATE_TYPES[plate.type].color}"></span>
+                    ${PLATE_TYPES[plate.type].name}
+                    <div style="font-size:11px; color:#9ca3af; margin-top:2px; margin-left:18px;">
+                        ${plate.width}×${plate.height}
+                    </div>
+                `;
+
+                item.addEventListener('click', () => {
+                    if (gamePhase !== 'place' || isUsed) return;
+                    selectedPlateIndex = selectedPlateIndex === idx ? null : idx;
+                    renderPlateList();
+                    updateStatus(selectedPlateIndex !== null
+                        ? '已选中石板，点击地图放置'
+                        : '点击左侧石板选中，再点击地图放置');
+                });
+
+                listEl.appendChild(item);
+            });
+        }
+
+        // ========== 石板放置 ==========
+        function handleTileClick(x, y) {
+            if (gamePhase !== 'place') return;
+            if (selectedPlateIndex === null) return;
+
+            const level = levels[currentLevel];
+            const plate = level.plates[selectedPlateIndex];
+
+            if (!canPlacePlate(x, y, plate.width, plate.height)) {
+                updateStatus('❌ 无法在此处放置石板（超出地图/覆盖墙体）');
+                return;
+            }
+
+            placedPlates.push({
+                type: plate.type,
+                x: x,
+                y: y,
+                width: plate.width,
+                height: plate.height,
+                plateIndex: selectedPlateIndex
+            });
+
+            selectedPlateIndex = null;
+            renderPlates();
+            renderPlateList();
+            updateStatus('✅ 石板放置成功，点击已放置石板可收回');
+        }
+
+        function canPlacePlate(x, y, w, h) {
+            const level = levels[currentLevel];
+            if (x < 0 || y < 0 || x + w > level.width || y + h > level.height) return false;
+
+            for (let dy = 0; dy < h; dy++) {
+                for (let dx = 0; dx < w; dx++) {
+                    const tx = x + dx;
+                    const ty = y + dy;
+                    if (level.map[ty][tx] === TILE.WALL) return false;
+                }
+            }
+            return true;
+        }
+
+        function getPlatesAtTile(x, y) {
+            return placedPlates.filter(p =>
+                x >= p.x && x < p.x + p.width &&
+                y >= p.y && y < p.y + p.height
+            );
+        }
+
+        function hasPlateEffect(x, y, effectType) {
+            return getPlatesAtTile(x, y).some(p => p.type === effectType);
+        }
+
+        function removePlate(idx) {
+            placedPlates.splice(idx, 1);
+            renderPlates();
+            renderPlateList();
+            updateStatus('石板已收回手牌');
+        }
+
+        // ========== 阶段切换 ==========
+        function togglePhase() {
+            if (gamePhase === 'place') {
+                gamePhase = 'play';
+                updatePhaseUI();
+                renderPlates();
+                updateStatus('行动阶段：使用方向键/WASD移动，可随时切回布置阶段调整石板');
+            } else {
+                gamePhase = 'place';
+                updatePhaseUI();
+                renderPlates();
+                updateStatus('回到布置阶段，可调整石板位置，当前位置保留');
+            }
+        }
+
+        function updatePhaseUI() {
+            const tag = document.getElementById('phase-tag');
+            const btn = document.getElementById('phase-btn');
+
+            if (gamePhase === 'place') {
+                tag.textContent = '📐 布置阶段';
+                tag.className = 'phase-tag phase-place';
+                btn.textContent = '开始执行';
+                btn.className = 'btn btn-primary';
+            } else {
+                tag.textContent = '🎮 行动阶段';
+                tag.className = 'phase-tag phase-play';
+                btn.textContent = '返回布置';
+                btn.className = 'btn btn-success';
+            }
+        }
+
+        // ========== 移动控制 ==========
+        function handleKeyPress(e) {
+            if (gamePhase !== 'play') return;
+
+            let dx = 0, dy = 0;
+            switch(e.key) {
+                case 'ArrowUp': case 'w': case 'W': dy = -1; break;
+                case 'ArrowDown': case 's': case 'S': dy = 1; break;
+                case 'ArrowLeft': case 'a': case 'A': dx = -1; break;
+                case 'ArrowRight': case 'd': case 'D': dx = 1; break;
+                default: return;
+            }
+            e.preventDefault();
+
+            // 反重力：区域内上下方向反转
+            if (hasPlateEffect(playerPos.x, playerPos.y, 'reverse_gravity')) {
+                dy = -dy;
+            }
+
+            movePlayer(dx, dy);
+        }
+
+        function isSafeVoid(x, y) {
+            return hasPlateEffect(x, y, 'void_fill') || hasPlateEffect(x, y, 'reverse_gravity');
+        }
+
+        function movePlayer(dx, dy) {
+            const level = levels[currentLevel];
+            const newX = playerPos.x + dx;
+            const newY = playerPos.y + dy;
+
+            if (newX < 0 || newX >= level.width || newY < 0 || newY >= level.height) return;
+
+            const targetTile = level.map[newY][newX];
+
+            if (targetTile === TILE.WALL) return;
+
+            if (targetTile === TILE.DOOR && !doorOpen) return;
+
+            // ===== 交换石板：踏入区域时触发 =====
+            if (hasPlateEffect(newX, newY, 'swap')) {
+                let nearestBoxIdx = null;
+                let minDist = Infinity;
+                boxes.forEach((box, idx) => {
+                    if (hasPlateEffect(box.x, box.y, 'swap')) {
+                        const d = Math.abs(box.x - newX) + Math.abs(box.y - newY);
+                        if (d > 0 && d < minDist) {
+                            minDist = d;
+                            nearestBoxIdx = idx;
+                        }
+                    }
+                });
+                if (nearestBoxIdx !== null) {
+                    const bx = boxes[nearestBoxIdx].x;
+                    const by = boxes[nearestBoxIdx].y;
+                    boxes[nearestBoxIdx].x = playerPos.x;
+                    boxes[nearestBoxIdx].y = playerPos.y;
+                    playerPos.x = bx;
+                    playerPos.y = by;
+                    turnCount++;
+                    // 交换后检查虚空
+                    if (level.map[playerPos.y][playerPos.x] === TILE.VOID
+                        && !isSafeVoid(playerPos.x, playerPos.y)) {
+                        gameOver('掉入虚空，挑战失败');
+                        return;
+                    }
+                    updateSwitches();
+                    processDelayClose();
+                    checkWin();
+                    renderMap();
+                    return;
+                }
+            }
+
+            // ===== 箱子碰撞 =====
+            const boxIdx = boxes.findIndex(b => b.x === newX && b.y === newY);
+            if (boxIdx !== -1) {
+                const box = boxes[boxIdx];
+                if (hasPlateEffect(box.x, box.y, 'lock_box')) {
+                    // 箱子被锁定：玩家可以穿过它
+                    // 不做阻挡，直接移动
+                } else {
+                    const boxNewX = box.x + dx;
+                    const boxNewY = box.y + dy;
+                    if (!canBoxMoveTo(boxNewX, boxNewY)) return;
+                    boxes[boxIdx].x = boxNewX;
+                    boxes[boxIdx].y = boxNewY;
+                    // 箱子掉入虚空
+                    if (level.map[boxNewY][boxNewX] === TILE.VOID
+                        && !isSafeVoid(boxNewX, boxNewY)) {
+                        boxes.splice(boxIdx, 1);
+                    }
+                }
+            }
+
+            // ===== 虚空检查 =====
+            if (targetTile === TILE.VOID && !isSafeVoid(newX, newY)) {
+                gameOver('掉入虚空，挑战失败');
+                return;
+            }
+
+            // ===== 移动玩家 =====
+            playerPos.x = newX;
+            playerPos.y = newY;
+            turnCount++;
+
+            // ===== 开关与延迟 =====
+            updateSwitches();
+            processDelayClose();
+
+            // ===== 同移石板 =====
+            if (hasPlateEffect(newX, newY, 'sync_move')) {
+                triggerSyncMove(dx, dy);
+                updateSwitches();
+            }
+
+            checkWin();
+            renderMap();
+        }
+
+        function canBoxMoveTo(x, y) {
+            const level = levels[currentLevel];
+            if (x < 0 || x >= level.width || y < 0 || y >= level.height) return false;
+
+            const tile = level.map[y][x];
+            if (tile === TILE.WALL || tile === TILE.DOOR) return false;
+            if (boxes.some(b => b.x === x && b.y === y)) return false;
+
+            return true;
+        }
+
+        function triggerSyncMove(dx, dy) {
+            boxes.forEach((box, idx) => {
+                if (hasPlateEffect(box.x, box.y, 'sync_move')
+                    && !hasPlateEffect(box.x, box.y, 'lock_box')) {
+                    const newX = box.x + dx;
+                    const newY = box.y + dy;
+                    if (canBoxMoveTo(newX, newY)) {
+                        boxes[idx].x = newX;
+                        boxes[idx].y = newY;
+                        // 箱子掉入虚空
+                        const level = levels[currentLevel];
+                        if (level.map[newY][newX] === TILE.VOID
+                            && !isSafeVoid(newX, newY)) {
+                            boxes.splice(idx, 1);
+                        }
+                    }
+                }
+            });
+        }
+
+        // ========== 开关 / 门 ==========
+        function updateSwitches() {
+            const level = levels[currentLevel];
+            let anyBoxOnSwitch = false;
+
+            for (let y = 0; y < level.height; y++) {
+                for (let x = 0; x < level.width; x++) {
+                    if (level.map[y][x] !== TILE.SWITCH) continue;
+
+                    const key = `${x},${y}`;
+                    const boxOn = boxes.some(b => b.x === x && b.y === y);
+                    const playerOn = playerPos.x === x && playerPos.y === y
+                        && !hasPlateEffect(x, y, 'light_step');
+
+                    // 玩家踩上机关 -> 机关损坏
+                    if (playerOn && !boxOn) {
+                        brokenSwitches.add(key);
+                    }
+
+                    if (boxOn) anyBoxOnSwitch = true;
+                }
+            }
+
+            // 是否有任何机关被损坏
+            let anyBroken = false;
+            for (let y = 0; y < level.height; y++) {
+                for (let x = 0; x < level.width; x++) {
+                    if (level.map[y][x] === TILE.SWITCH && brokenSwitches.has(`${x},${y}`)) {
+                        anyBroken = true;
+                    }
+                }
+            }
+
+            const shouldOpen = anyBoxOnSwitch && !anyBroken;
+
+            if (shouldOpen) {
+                doorOpen = true;
+                doorCloseAt = Infinity;
+            } else if (doorOpen && doorCloseAt === Infinity) {
+                // 门即将关闭：检查是否有延迟机关
+                let hasDelaySwitch = false;
+                for (let y = 0; y < level.height; y++) {
+                    for (let x = 0; x < level.width; x++) {
+                        if (level.map[y][x] === TILE.SWITCH && hasPlateEffect(x, y, 'delay')) {
+                            hasDelaySwitch = true;
+                        }
+                    }
+                }
+                if (hasDelaySwitch) {
+                    doorCloseAt = turnCount + 2;
+                } else {
+                    doorOpen = false;
+                }
+            }
+
+            // 延迟关闭计时
+            if (doorOpen && turnCount >= doorCloseAt) {
+                doorOpen = false;
+                doorCloseAt = Infinity;
+            }
+        }
+
+        function processDelayClose() {
+            // 由 updateSwitches 统一处理，此处保留空函数以兼容调用
+        }
+
+        // ========== 胜利 / 失败 ==========
+        function checkWin() {
+            const level = levels[currentLevel];
+            if (level.map[playerPos.y][playerPos.x] === TILE.GOAL) {
+                if (hasPlateEffect(playerPos.x, playerPos.y, 'goal_disable')) {
+                    updateStatus('终点被否定石板覆盖，无法通关');
+                    return;
+                }
+                showWinModal();
+            }
+        }
+
+        function gameOver(msg) {
+            updateStatus('💀 ' + msg);
+            setTimeout(() => {
+                resetLevel();
+            }, 1000);
+        }
+
+        function showWinModal() {
+            document.getElementById('win-text').textContent = `你用了 ${turnCount} 步完成本关！`;
+            document.getElementById('win-modal').classList.add('show');
+        }
+
+        // ========== 按钮 ==========
+        function resetLevel() {
+            document.getElementById('win-modal').classList.remove('show');
+            loadLevel(currentLevel);
+        }
+
+        function prevLevel() {
+            document.getElementById('win-modal').classList.remove('show');
+            if (currentLevel > 0) {
+                loadLevel(currentLevel - 1);
+            }
+        }
+
+        function nextLevel() {
+            document.getElementById('win-modal').classList.remove('show');
+            if (currentLevel < levels.length - 1) {
+                loadLevel(currentLevel + 1);
+            } else {
+                updateStatus('🎉 恭喜通关全部关卡！');
+            }
+        }
+
+        function updateStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        initGame();
+    </script>
+</body>
+</html>
